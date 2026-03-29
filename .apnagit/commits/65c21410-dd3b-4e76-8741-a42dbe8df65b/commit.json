@@ -1,0 +1,11 @@
+{
+  "message": "Conflict branch change",
+  "timestamp": "2026-03-25T16:32:54.311Z",
+  "parent": "6eb76fcf-8a81-42fd-90a3-3b4f0d094ce4",
+  "parents": [
+    "6eb76fcf-8a81-42fd-90a3-3b4f0d094ce4"
+  ],
+  "files": {
+    "common.txt": "9d8955416644ccb17ca2554e8f037ab69ccdcb11"
+  }
+}

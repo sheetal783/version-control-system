@@ -1,0 +1,13 @@
+{
+  "message": "Merge branch 'feature' into main",
+  "timestamp": "2026-03-25T16:32:54.252Z",
+  "parent": null,
+  "parents": [
+    "3aa036f7-3698-4850-8c19-84c86cc02b92",
+    "63f1d361-b144-4a26-9160-6fd15f6c9fad"
+  ],
+  "files": {
+    "feature_only.txt": "4335ec70dfda392bda5f64d4a456197d09f38542",
+    "main_only.txt": "7fd7e09705a4e87448bbf1e293cf6a9368c14ab8"
+  }
+}
