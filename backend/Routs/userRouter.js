@@ -14,5 +14,7 @@ userRouter.post("/user/follow", authMiddleware, userController.followUser);
 userRouter.post("/user/unfollow", authMiddleware, userController.unfollowUser);
 userRouter.post("/user/star", authMiddleware, userController.starRepo);
 userRouter.post("/user/unstar", authMiddleware, userController.unstarRepo);
+userRouter.post("/user/forgot-password", userController.forgotPassword);
+userRouter.post("/user/reset-password/:token", userController.resetPassword);
 
 export default userRouter;

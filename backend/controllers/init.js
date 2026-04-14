@@ -6,6 +6,12 @@ import path from 'path';
 
 
 export async function initRepo() {
+    // Safety check: Ensure we are in the backend directory
+    if (!process.cwd().endsWith('backend')) {
+        console.error("❌ Error: ApnaGit commands must be run from inside the 'backend' folder.");
+        return;
+    }
+
     const repoPath = path.resolve(process.cwd(), '.apnagit');
     const commitsPath = path.join(repoPath, 'commit');
     const stagingPath = path.join(repoPath, 'staging');
@@ -14,8 +20,8 @@ export async function initRepo() {
         await fs.mkdir(repoPath, { recursive: true });
         await fs.mkdir(commitsPath, { recursive: true });
         await fs.mkdir(stagingPath, { recursive: true });
-        console.log("Initialized a new empty repository");
+        console.log("✅ Initialized a new empty repository in " + process.cwd());
     } catch (err) {
-        console.error("Error initializing repository:", err.message);
+        console.error("❌ Error initializing repository:", err.message);
     }
 }

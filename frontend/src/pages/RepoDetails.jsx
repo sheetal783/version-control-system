@@ -13,6 +13,7 @@ import { useIssues } from '../context/IssuesContext';
 const RepoDetails = () => {
   const { id } = useParams();
   const [repo, setRepo] = useState(null);
+  const [commits, setCommits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('Overview');
@@ -35,27 +36,31 @@ const RepoDetails = () => {
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [issueForm, setIssueForm] = useState({ title: '', description: '', status: 'open' });
 
+  const fetchCommits = useCallback(async (repoName) => {
+    try {
+      const response = await api.get(`/api/commits/${repoName}`);
+      setCommits(response.data);
+    } catch (error) {
+      console.error("Failed to fetch commits", error);
+    }
+  }, []);
+
   const fetchRepoDetails = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const response = await api.get(`/repo/${id}`);
       setRepo(response.data);
+      if (response.data.name) {
+        fetchCommits(response.data.name);
+      }
     } catch (error) {
       console.error("Failed to fetch repository details", error);
       setError(error?.response?.data?.message || error.message || 'Failed to load repository');
-      // Fallback mock data for visual demonstration if API fails or isn't populated
-      setRepo({
-        _id: id,
-        name: 'awesome-project',
-        description: 'A cutting-edge SaaS platform for developers.',
-        visibility: false,
-        issues: [],
-      });
     } finally {
       setTimeout(() => setLoading(false), 400);
     }
-  }, [id]);
+  }, [id, fetchCommits]);
 
   useEffect(() => {
     fetchRepoDetails();
@@ -79,22 +84,15 @@ const RepoDetails = () => {
   const tabs = [
     { id: 'Overview', icon: Terminal },
     { id: 'Issues', icon: CircleDot, count: openIssuesCount },
-    { id: 'Commits', icon: GitCommit, count: 48 },
+    { id: 'Commits', icon: GitCommit, count: commits.length },
   ];
 
-  const files = [
-    { name: 'src', type: 'folder', message: 'Update components architecture', time: '2 days ago' },
-    { name: 'public', type: 'folder', message: 'Add new favicons', time: '1 week ago' },
-    { name: 'package.json', type: 'file', message: 'Bump dependencies', time: '5 hours ago' },
-    { name: 'README.md', type: 'file', message: 'Docs update', time: '1 hour ago' },
-  ];
-
-  const commits = [
-    { hash: 'a1b2c3d', message: 'feat: add sophisticated glassmorphism UI', author: 'sheetal', time: '2 hours ago' },
-    { hash: 'f8e7d6c', message: 'fix: resolve layout shift on mobile sidebar', author: 'sheetal', time: '5 hours ago' },
-    { hash: '9b8v7c6', message: 'docs: update repository documentation', author: 'collab_dev', time: 'Yesterday' },
-    { hash: '5x4z3y2', message: 'init: initial commit setup', author: 'sheetal', time: '3 days ago' },
-  ];
+  const files = commits.length > 0 ? (commits[0].files || []).map(f => ({
+    name: f,
+    type: 'file', // Our push logic currently only tracks files
+    message: commits[0].message,
+    time: new Date(commits[0].timestamp).toLocaleString()
+  })) : [];
 
   const tabContentVariants = {
     initial: { opacity: 0, y: 10, filter: 'blur(4px)' },
@@ -253,7 +251,7 @@ const RepoDetails = () => {
                   </div>
                   
                   <ul className="divide-y divide-white/5">
-                    {files.map((file, i) => (
+                    {files.length > 0 ? files.map((file, i) => (
                       <motion.li 
                         variants={itemVariants}
                         key={i} 
@@ -270,31 +268,31 @@ const RepoDetails = () => {
                         <span className="text-xs sm:text-sm text-gray-500 truncate flex-1 group-hover:text-gray-400 transition-colors pl-7 sm:pl-0">{file.message}</span>
                         <span className="text-xs text-gray-500 text-right w-24 hidden md:block group-hover:text-gray-400">{file.time}</span>
                       </motion.li>
-                    ))}
+                    )) : (
+                      <div className="p-8 text-center">
+                        <p className="text-gray-500 text-sm">This repository has no files yet.</p>
+                        <p className="text-gray-600 text-xs mt-1">Run <code className="bg-white/5 px-1 rounded">push</code> from your CLI to upload files.</p>
+                      </div>
+                    )}
                   </ul>
                 </motion.div>
                 
-                {/* README UI */}
-                <motion.div variants={itemVariants} className="glass-panel p-6 sm:p-8 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-bl-[100px] pointer-events-none group-hover:bg-purple-500/10 transition-colors duration-500"></div>
-                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
-                    <BookOpen className="text-blue-400" size={20} />
-                    <h3 className="font-bold text-white tracking-widest text-sm uppercase">README.md</h3>
-                  </div>
-                  <div className="prose prose-invert max-w-none prose-headings:text-transparent prose-headings:bg-clip-text prose-headings:bg-gradient-to-r prose-headings:from-white prose-headings:to-gray-400">
-                    <h1 className="text-4xl font-extrabold mb-4">{repo?.name || 'Repository'}</h1>
-                    <p className="text-gray-400 text-lg leading-relaxed mb-6">
-                      A powerful, modern implementation of a version control system. Designed with seamless developer experience in mind.
-                    </p>
-                    
-                    <h2 className="text-2xl font-bold mt-8 mb-4 border-b border-white/10 pb-2">Installation</h2>
-                    <div className="glass-card mt-4 p-5 border-l-4 border-l-blue-500 flex font-mono text-sm bg-black/40 rounded-r-lg relative overflow-hidden group/code">
-                      <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover/code:opacity-100 transition-opacity"></div>
-                      <span className="text-green-400 mr-3 select-none">$</span>
-                      <span className="text-gray-300 relative z-10">git clone https://vcs.local/{repo?.name || 'repo'}.git<br/>cd {repo?.name || 'repo'}<br/>npm install</span>
+                {/* README UI (Only show if README.md exists) */}
+                {files.some(f => f.name.toLowerCase() === 'readme.md') && (
+                  <motion.div variants={itemVariants} className="glass-panel p-6 sm:p-8 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-bl-[100px] pointer-events-none group-hover:bg-purple-500/10 transition-colors duration-500"></div>
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
+                      <BookOpen className="text-blue-400" size={20} />
+                      <h3 className="font-bold text-white tracking-widest text-sm uppercase">README.md</h3>
                     </div>
-                  </div>
-                </motion.div>
+                    <div className="prose prose-invert max-w-none prose-headings:text-transparent prose-headings:bg-clip-text prose-headings:bg-gradient-to-r prose-headings:from-white prose-headings:to-gray-400">
+                      <h1 className="text-4xl font-extrabold mb-4">{repo?.name || 'Repository'}</h1>
+                      <p className="text-gray-400 text-lg leading-relaxed mb-6">
+                        {repo?.description || 'Repository content.'}
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
               </div>
 
               {/* Sidebar Info */}
@@ -468,16 +466,16 @@ const RepoDetails = () => {
                 <GitCommit className="text-blue-400" /> Commit History
               </h3>
               <div className="relative border-l-2 border-white/10 ml-3 md:ml-4 space-y-8 pb-4">
-                {commits.map((commit, i) => (
-                  <motion.div variants={itemVariants} key={commit.hash} className="relative pl-6 md:pl-8">
+                {commits.length > 0 ? commits.map((commit, i) => (
+                  <motion.div variants={itemVariants} key={commit.commitId} className="relative pl-6 md:pl-8">
                     <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full bg-blue-500/20 border-2 border-blue-500 ring-4 ring-[#0a0f1c]"></div>
                     <div className="glass-card bg-black/20 p-4 hover:border-blue-500/30 transition-colors">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
                         <span className="font-mono text-xs text-blue-400 bg-blue-400/10 px-2 py-1 rounded inline-block w-fit">
-                          {commit.hash}
+                          {commit.commitId.slice(0, 7)}
                         </span>
                         <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <Clock size={12} /> {commit.time}
+                          <Clock size={12} /> {new Date(commit.timestamp).toLocaleString()}
                         </span>
                       </div>
                       <p className="text-gray-200 font-medium mb-3">{commit.message}</p>
@@ -487,7 +485,11 @@ const RepoDetails = () => {
                       </div>
                     </div>
                   </motion.div>
-                ))}
+                )) : (
+                  <div className="pl-6 md:pl-8 py-4">
+                    <p className="text-gray-500 text-sm">No commits found yet.</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

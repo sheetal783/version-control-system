@@ -16,6 +16,7 @@ import { commitRepo } from "./controllers/commit.js";
 import { Push } from "./controllers/push.js";
 import { Pull } from "./controllers/pull.js";
 import { revertRepo } from "./controllers/revert.js";
+import { setRemote } from "./controllers/remote.js";
 import mainRouter from "./Routs/mainRouter.js";
 // CLI commands
 yargs(hideBin(process.argv))
@@ -112,6 +113,23 @@ yargs(hideBin(process.argv))
         revertRepo(argv.commitId);
       } catch (error) {
         console.error('Error in revert command:', error);
+      }
+    }
+  )
+  .command(
+    "remote <name>",
+    "link to a remote repository",
+    (yargs) => {
+      yargs.positional("name", {
+        describe: "name of the remote repository in MongoDB",
+        type: "string",
+      });
+    },
+    (argv) => {
+      try {
+        setRemote(argv.name);
+      } catch (error) {
+        console.error('Error in remote command:', error);
       }
     }
   )

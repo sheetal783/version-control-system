@@ -9,6 +9,8 @@ import ConflictResolver from './pages/ConflictResolver';
 import Repositories from './pages/Repositories';
 import Issues from './pages/Issues';
 import Profile from './pages/Profile';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -21,6 +23,8 @@ function App() {
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/signup" element={user ? <Navigate to="/" /> : <Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         
         {/* Protected Routes inside Layout */}
         <Route element={<Layout />}>

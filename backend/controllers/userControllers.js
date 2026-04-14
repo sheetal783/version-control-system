@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import { ObjectId } from "mongodb";
@@ -191,4 +193,99 @@ export async function starRepo(req, res) {
 
 export const unstarRepo = (req, res) => {
     res.send("unstar repo");
+}
+
+// ── Forgot Password ────────────────────────────────────────────
+export async function forgotPassword(req, res) {
+    const { email } = req.body;
+    try {
+        await connectClient();
+        const db = client.db(DB_NAME);
+        const userCollection = db.collection("users");
+
+        const user = await userCollection.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: "No account with that email." });
+        }
+
+        // Generate token
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+        const tokenExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+        // Save hashed token + expiry in DB
+        await userCollection.updateOne(
+            { _id: user._id },
+            { $set: { resetPasswordToken: hashedToken, resetPasswordExpire: tokenExpiry } }
+        );
+
+        // Build reset URL
+        const clientURL = process.env.FRONTEND_URL || "http://localhost:5173";
+        const resetURL = `${clientURL}/reset-password/${resetToken}`;
+
+        // Send email
+        const transporter = nodemailer.createTransport({
+            service: "Gmail",
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        });
+
+        await transporter.sendMail({
+            from: `"ApnaGit" <${process.env.EMAIL_USER}>`,
+            to: user.email,
+            subject: "Password Reset Request",
+            html: `
+                <h2>Password Reset</h2>
+                <p>Click the link below to reset your password. It expires in 15 minutes.</p>
+                <a href="${resetURL}">${resetURL}</a>
+                <p>If you didn't request this, ignore this email.</p>
+            `,
+        });
+
+        res.status(200).json({ message: "Reset link sent to your email." });
+    } catch (err) {
+        console.error("Forgot password error:", err.message);
+        res.status(500).json({ message: "Server error." });
+    }
+}
+
+// ── Reset Password ─────────────────────────────────────────────
+export async function resetPassword(req, res) {
+    const { password } = req.body;
+    const hashedToken = crypto.createHash("sha256").update(req.params.token).digest("hex");
+
+    try {
+        await connectClient();
+        const db = client.db(DB_NAME);
+        const userCollection = db.collection("users");
+
+        const user = await userCollection.findOne({
+            resetPasswordToken: hashedToken,
+            resetPasswordExpire: { $gt: new Date() },
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: "Invalid or expired token." });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Update password & clear reset fields
+        await userCollection.updateOne(
+            { _id: user._id },
+            {
+                $set: { password: hashedPassword },
+                $unset: { resetPasswordToken: "", resetPasswordExpire: "" },
+            }
+        );
+
+        res.status(200).json({ message: "Password reset successful!" });
+    } catch (err) {
+        console.error("Reset password error:", err.message);
+        res.status(500).json({ message: "Server error." });
+    }
 }
