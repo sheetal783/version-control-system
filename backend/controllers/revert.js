@@ -1,35 +1,36 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
-import { promisify } from 'util';
-
-const readdir = promisify(fs.readdir);
-const readFile = promisify(fs.readFile);
-const writeFile = promisify(fs.writeFile);
-const mkdir = promisify(fs.mkdir);
-const copyFile = promisify(fs.copyFile);
-const unlink = promisify(fs.unlink);
-const stat = promisify(fs.stat);
-
 
 export async function revertRepo(commitId) {
     const repoPath = path.resolve(process.cwd(), '.apnagit');
     const commitPath = path.join(repoPath, 'commit');
-
+    const commitDir = path.join(commitPath, commitId);
+    const parentDir = path.resolve(repoPath, '..');
 
     try {
-        const commitDir = path.join(commitPath, commitId);
+        const stats = await fs.stat(commitDir);
+        if (!stats.isDirectory()) {
+            throw new Error(`Commit path is not a directory: ${commitDir}`);
+        }
 
-        const files = await readdir(commitDir);
-        const parentDir = path.resolve(repoPath, "..");
+        const files = await fs.readdir(commitDir);
+        if (files.length === 0) {
+            console.log(`Commit ${commitId} has no files to restore.`);
+            return;
+        }
 
         for (const file of files) {
-            await copyFile(path.join(commitDir, file), path.join(parentDir, file));
-
+            if (file === 'commit.json') continue;
+            await fs.copyFile(path.join(commitDir, file), path.join(parentDir, file));
         }
-        console.log(`commit ${commitId}  revert successfully`);
-    }
-    catch (error) {
-        console.log("unable to revert", error);
-    }
 
+        console.log(`Commit ${commitId} reverted successfully.`);
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            console.error(`Unable to revert: commit '${commitId}' does not exist.`);
+        } else {
+            console.error('Unable to revert:', error.message);
+        }
+        process.exitCode = 1;
+    }
 }

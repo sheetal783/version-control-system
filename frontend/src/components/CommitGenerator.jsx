@@ -38,11 +38,20 @@ const CommitGenerator = ({ isOpen, onClose }) => {
     setError(null);
     
     try {
+      // Pass the user input as 'changes' context to the AI service
       const results = await generateCommitMessage(input);
-      setSuggestions(Array.isArray(results) ? results : [String(results)]);
+      
+      if (results && results.length > 0) {
+        // Set all results to the state to be mapped over in the UI
+        setSuggestions(results);
+      } else {
+        throw new Error('No suggestions returned from AI. Please try again with more detail.');
+      }
     } catch (err) {
       console.error('Failed to generate commit messages:', err);
-      setError(err.response?.data?.message || err.message || 'AI Provider offline. Could not generate messages.');
+      // Backend errors might be in err.response.data.error or err.response.data.details
+      const backendError = err.response?.data?.error || err.response?.data?.details || err.response?.data?.message;
+      setError(backendError || err.message || 'AI Provider offline. Could not generate messages.');
     } finally {
       setIsGenerating(false);
     }
@@ -154,7 +163,7 @@ const CommitGenerator = ({ isOpen, onClose }) => {
                     className="space-y-3 pt-4 border-t border-white/10"
                   >
                     <div className="flex items-center gap-2 text-sm text-purple-400 font-medium mb-2">
-                      <Sparkles size={14} className="animate-pulse" /> Generating semantic commits...
+                       Generating suggestions...
                     </div>
                     {[1, 2, 3].map((i) => (
                       <div key={i} className="h-14 bg-white/5 border border-white/5 rounded-xl flex items-center px-4 overflow-hidden relative">
@@ -210,8 +219,8 @@ const CommitGenerator = ({ isOpen, onClose }) => {
                           
                           <code className="text-gray-200 text-sm font-mono relative z-10 flex-1 truncate pr-4 selection:bg-purple-500/30">
                             {/* Highlight prefix dynamically */}
-                            <span className="text-purple-400 font-semibold">{msg.split(':')[0]}</span>
-                            {msg.includes(':') ? ':' + msg.split(':').slice(1).join(':') : msg.substring(msg.indexOf(' '))}
+                            <span className="text-purple-400 font-semibold">{msg.includes(':') ? msg.split(':')[0] : 'commit'}</span>
+                            {msg.includes(':') ? ':' + msg.split(':').slice(1).join(':') : ' ' + msg}
                           </code>
                           
                           <button className="relative z-10 p-2 bg-white/5 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors flex-shrink-0">

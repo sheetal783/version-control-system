@@ -40,11 +40,14 @@ api.interceptors.response.use(
 
 export const generateCommitMessage = async (changes) => {
   const response = await api.post('/generate-commit-message', { changes });
-  // Return the suggestions array, or fallback parsing
+  // Return the messages array from the backend response
+  if (response.data.messages && Array.isArray(response.data.messages)) {
+    return response.data.messages;
+  }
+  // Fallback parsing for different response formats
   if (Array.isArray(response.data)) return response.data;
   if (response.data.suggestions) return response.data.suggestions;
   if (response.data.message) return [response.data.message];
-  if (typeof response.data === 'string') return response.data.split('\n').filter(Boolean);
   return ["Failed to parse AI response"];
 };
 

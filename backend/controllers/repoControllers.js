@@ -37,8 +37,20 @@ export async function getAllRepositories(req, res) {
         res.status(200).json(repositories);
     }
     catch (error) {
-        console.error("Error fetching repositories:", error.message);
-        res.status(500).send("server error");
+        console.error("❌ Error fetching repositories:", error.message);
+        console.error("Error details:", error);
+        
+        if (error.name === "MongoNetworkError" || error.name === "MongoTimeoutError") {
+            return res.status(503).json({ 
+                error: "Database connection failed. Please try again later.",
+                details: error.message 
+            });
+        }
+        
+        res.status(500).json({ 
+            error: "server error",
+            details: error.message 
+        });
     }
 };
 
@@ -88,8 +100,20 @@ export async function fetchRepositoriesForCurrentUser(req, res) {
         res.status(200).json({message:"repositories fetched successfully", repositories});
     }
     catch (error) {
-        console.error("Error fetching repositories for current user:", error.message);
-        res.status(500).send("server error");
+        console.error("❌ Error fetching repositories for current user:", error.message);
+        console.error("Error details:", error);
+        
+        if (error.name === "MongoNetworkError" || error.name === "MongoTimeoutError") {
+            return res.status(503).json({ 
+                error: "Database connection failed. Please try again later.",
+                details: error.message 
+            });
+        }
+        
+        res.status(500).json({ 
+            error: "server error",
+            details: error.message 
+        });
     }
 };
 

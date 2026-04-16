@@ -1,0 +1,22 @@
+{
+  "name": "version-control-system",
+  "version": "1.0.0",
+  "description": "Full-stack version control system with Git integration",
+  "type": "module",
+  "scripts": {
+    "client": "npm run dev --prefix frontend",
+    "server": "node backend/index.js start",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "build": "npm install && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "node backend/index.js start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "keywords": ["vcs", "git", "version-control"],
+  "author": "sheetal",
+  "license": "ISC"
+}
