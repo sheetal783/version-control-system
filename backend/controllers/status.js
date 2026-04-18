@@ -1,42 +1,48 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import { resolveHead } from './commit.js';
+import { validateVcsRepo, resolveHead } from '../utils/vcs.js';
 
 /**
- * Calculates SHA-1 hash of a file's content
+ * Calculates SHA-256 hash of a file's content (Standardized to SHA-256 used in commit.js)
  */
 async function getFileHash(filePath) {
     try {
         const content = await fs.readFile(filePath);
-        return crypto.createHash('sha1').update(content).digest('hex');
+        return crypto.createHash('sha256').update(content).digest('hex');
     } catch (err) {
         return null;
     }
 }
 
 /**
- * Recursively gets all files in a directory, ignoring .apnagit and node_modules
+ * Recursively gets all files in a directory, ignoring system and VCS directories
  */
 async function getAllFiles(dir, allFiles = []) {
-    const files = await fs.readdir(dir);
-    for (const file of files) {
-        if (file === '.apnagit' || file === 'node_modules' || file === '.git') continue;
-        
-        const filePath = path.join(dir, file);
-        const stat = await fs.stat(filePath);
-        
-        if (stat.isDirectory()) {
-            await getAllFiles(filePath, allFiles);
-        } else {
-            allFiles.push(path.relative(process.cwd(), filePath));
+    try {
+        const files = await fs.readdir(dir);
+        for (const file of files) {
+            if (file === '.vcs' || file === 'node_modules' || file === '.git') continue;
+            
+            const filePath = path.join(dir, file);
+            const stat = await fs.stat(filePath);
+            
+            if (stat.isDirectory()) {
+                await getAllFiles(filePath, allFiles);
+            } else {
+                allFiles.push(path.relative(process.cwd(), filePath));
+            }
         }
+    } catch (err) {
+        // Directory might not exist or be inaccessible
     }
     return allFiles;
 }
 
 export async function getStatus() {
-    const repoPath = path.resolve(process.cwd(), '.apnagit');
+    await validateVcsRepo();
+
+    const repoPath = path.resolve(process.cwd(), '.vcs');
     const commitsPath = path.join(repoPath, 'commits');
 
     try {
@@ -46,8 +52,12 @@ export async function getStatus() {
         
         if (latestCommitId) {
             const commitJsonPath = path.join(commitsPath, latestCommitId, 'commit.json');
-            const commitData = JSON.parse(await fs.readFile(commitJsonPath, 'utf8'));
-            latestFiles = commitData.files || {};
+            try {
+                const commitData = JSON.parse(await fs.readFile(commitJsonPath, 'utf8'));
+                latestFiles = commitData.files || {};
+            } catch (err) {
+                console.error(`Warning: Could not read commit data for ${latestCommitId}`);
+            }
         }
 
         // 2. Get current working directory files
@@ -78,7 +88,7 @@ export async function getStatus() {
         }
 
         // 5. Output results
-        console.log(`--- VCS Status (Branch: ${branchName || 'Detached HEAD'}) ---`);
+        console.log(`--- VCS Status (Branch: ${branchName || 'Initial'}) ---`);
         
         if (status.modified.length > 0) {
             console.log("\nModified files:");

@@ -23,8 +23,16 @@ const CommitSchema = new mongoose.Schema({
         default: Date.now,
     },
     files: {
-        type: [String],
-        default: [],
+        type: mongoose.Schema.Types.Mixed,
+        default: {},
+    },
+    parent: {
+        type: String,
+        default: null,
+    },
+    branch: {
+        type: String,
+        default: "main",
     },
 });
 

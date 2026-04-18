@@ -1,0 +1,9 @@
+{
+  "name": "vcs-cli",
+  "version": "1.0.0",
+  "description": "Global CLI for custom version control system",
+  "type": "module",
+  "bin": {
+    "vcs": "./vcs.js"
+  }
+}

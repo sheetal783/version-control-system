@@ -1,117 +1,77 @@
-import fs from "fs";
-import path from "path";
-import { s3, S3_BUCKET } from "../config/aws-config.js";
+import fs from 'fs/promises';
+import path from 'path';
+import { validateVcsRepo, validateRepoName, handleApiError, resolveHead } from '../utils/vcs.js';
 
-const API_URL = process.env.API_URL || "http://localhost:5000";
+const API_URL = process.env.FRONTEND_URL?.replace('5173', '5000') || 'http://localhost:5000';
 
 export async function Push() {
-  const repoPath = path.resolve(process.cwd(), ".apnagit");
-  const commitsPath = path.join(repoPath, "commit");
-  const remotePath = path.join(repoPath, "remote.json");
+  await validateVcsRepo();
+  const repoName = await validateRepoName();
+  if (!repoName) return;
 
-  // Read repo name from remote.json
-  let repoName;
-  if (fs.existsSync(remotePath)) {
-    const remoteConfig = JSON.parse(fs.readFileSync(remotePath, "utf8"));
-    repoName = remoteConfig.remote;
-  }
-
-  if (!repoName) {
-    console.error(
-      "❌ Error: No remote repository linked. Run \"node index.js remote <name>\" first."
-    );
-    return;
-  }
+  const repoPath = path.resolve(process.cwd(), '.vcs');
+  const commitsPath = path.join(repoPath, 'commits');
+  const configPath = path.join(repoPath, 'config.json');
 
   try {
-    // 👉 if commits folder does not exist
-    if (!fs.existsSync(commitsPath)) {
-      console.log("⚠️ No commits found to push");
+    let configData = JSON.parse(await fs.readFile(configPath, 'utf8'));
+
+    const { commitId: headCommitId } = await resolveHead();
+    let currentHash = headCommitId;
+    const commitsData = [];
+
+    while (currentHash && currentHash !== configData.lastPushed) {
+      const commitDir = path.join(commitsPath, currentHash);
+      const commitJsonPath = path.join(commitDir, 'commit.json');
+
+      try {
+        const commitContent = await fs.readFile(commitJsonPath, 'utf8');
+        const commitMeta = JSON.parse(commitContent);
+        
+        commitsData.push({
+          commitHash: currentHash,
+          ...commitMeta
+        });
+
+        currentHash = commitMeta.parent;
+      } catch (error) {
+        console.error(`Error reading commit ${currentHash}:`, error.message);
+        break;
+      }
+    }
+
+    // Reverse to push in chronological order
+    commitsData.reverse();
+
+    if (commitsData.length === 0) {
+      console.log("No new commits to push");
       return;
     }
 
-    // 👉 read commit folders
-    const commitDirs = await fs.promises.readdir(commitsPath);
+    // POST all commits to API
+    try {
+      const response = await fetch(`${API_URL}/api/commit/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoName,
+          commits: commitsData
+        })
+      });
 
-    for (const commitId of commitDirs) {
-      const commitPath = path.join(commitsPath, commitId);
-
-      // 👉 check it's a directory
-      const stat = await fs.promises.stat(commitPath);
-      if (!stat.isDirectory()) continue;
-
-      const files = await fs.promises.readdir(commitPath);
-      const uploadedFiles = [];
-
-      for (const file of files) {
-        const filePath = path.join(commitPath, file);
-
-        // 👉 ensure it's a file
-        const fileStat = await fs.promises.stat(filePath);
-        if (!fileStat.isFile()) continue;
-
-        // 👉 read file content
-        const fileContent = await fs.promises.readFile(filePath);
-
-        // 👉 upload params
-        const params = {
-          Bucket: S3_BUCKET,
-          Key: `commits/${commitId}/${file}`,
-          Body: fileContent,
-        };
-
-        // ✅ upload to S3
-        await s3.upload(params).promise();
-        console.log(`⬆️ Uploaded: commits/${commitId}/${file}`);
-
-        // Track non-metadata files
-        if (file !== "commit.json") {
-          uploadedFiles.push(file);
-        }
+      if (response.ok) {
+        const lastCommitHash = commitsData[commitsData.length - 1].commitHash;
+        configData.lastPushed = lastCommitHash;
+        await fs.writeFile(configPath, JSON.stringify(configData, null, 2));
+        console.log(`Pushed ${commitsData.length} commits to remote`);
+      } else {
+        await handleApiError(response, "push");
       }
-
-      // 👉 Also save commit data to MongoDB via Express API
-      try {
-        const commitJsonPath = path.join(commitPath, "commit.json");
-        let message = "No message";
-        let timestamp = new Date().toISOString();
-        let author = "CLI User";
-
-        if (fs.existsSync(commitJsonPath)) {
-          const commitData = JSON.parse(
-            await fs.promises.readFile(commitJsonPath, "utf8")
-          );
-          message = commitData.message || message;
-          timestamp = commitData.timestamp || timestamp;
-          author = commitData.author || author;
-        }
-
-        const response = await fetch(`${API_URL}/api/commits`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            commitId,
-            repoName,
-            message,
-            author,
-            timestamp,
-            files: uploadedFiles,
-          }),
-        });
-
-        if (response.ok) {
-          console.log(`📦 Commit ${commitId.slice(0, 8)}... synced to database`);
-        } else {
-          console.warn(`⚠️ Failed to sync commit ${commitId.slice(0, 8)} to DB`);
-        }
-      } catch (dbErr) {
-        // Don't fail the push if DB sync fails — S3 upload already succeeded
-        console.warn(`⚠️ DB sync skipped for ${commitId.slice(0, 8)}: ${dbErr.message}`);
-      }
+    } catch (error) {
+      console.error(`Error: Connection failed during push. (${error.message})`);
     }
 
-    console.log("✅ Push successful: All commits pushed to S3 🚀");
   } catch (err) {
-    console.error("❌ Error during push:", err.message);
+    console.error("Error during push:", err.message);
   }
-}
+}

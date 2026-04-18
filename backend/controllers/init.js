@@ -1,27 +1,45 @@
-// #region agent log
-fetch('http://127.0.0.1:7243/ingest/bc8ed9df-e2f0-4adf-b6b1-e9c446f62c5f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'controllers/init.js:1', message: 'init.js module loading', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'G' }) }).catch(() => { });
-// #endregion
 import fs from 'fs/promises';
 import path from 'path';
 
-
 export async function initRepo() {
-    // Safety check: Ensure we are in the backend directory
-    if (!process.cwd().endsWith('backend')) {
-        console.error("❌ Error: ApnaGit commands must be run from inside the 'backend' folder.");
-        return;
-    }
-
-    const repoPath = path.resolve(process.cwd(), '.apnagit');
-    const commitsPath = path.join(repoPath, 'commit');
-    const stagingPath = path.join(repoPath, 'staging');
+    const cwd = process.cwd();
+    const repoName = path.basename(cwd);
+    const vcsRoot = path.join(cwd, ".vcs");
+    const branchesDir = path.join(vcsRoot, "branches");
+    const commitsDir = path.join(vcsRoot, "commits");
+    const headPath = path.join(vcsRoot, "HEAD");
+    const configPath = path.join(vcsRoot, "config.json");
+    const indexPath = path.join(vcsRoot, "index.json");
+    const mainBranchPath = path.join(branchesDir, "main.json");
 
     try {
-        await fs.mkdir(repoPath, { recursive: true });
-        await fs.mkdir(commitsPath, { recursive: true });
-        await fs.mkdir(stagingPath, { recursive: true });
-        console.log("✅ Initialized a new empty repository in " + process.cwd());
+        await fs.access(vcsRoot);
+        console.error("Already a vcs repository");
+        return;
     } catch (err) {
-        console.error("❌ Error initializing repository:", err.message);
+        if (err.code !== "ENOENT") {
+            console.error("Failed to check repo state:", err.message);
+            return;
+        }
+    }
+
+    try {
+        await fs.mkdir(vcsRoot, { recursive: true });
+        await fs.mkdir(branchesDir, { recursive: true });
+        await fs.mkdir(commitsDir, { recursive: true });
+
+        await fs.writeFile(headPath, "main", "utf8");
+        await fs.writeFile(configPath, JSON.stringify({
+            repoName,
+            remote: "http://localhost:5000",
+            created: new Date().toISOString(),
+            author: process.env.USER || process.env.USERNAME || "unknown"
+        }, null, 2), "utf8");
+        await fs.writeFile(indexPath, JSON.stringify({ tracked: {} }, null, 2), "utf8");
+        await fs.writeFile(mainBranchPath, JSON.stringify({ name: "main", head: null }, null, 2), "utf8");
+
+        console.log(`Initialized empty vcs repository in ${vcsRoot}`);
+    } catch (writeError) {
+        console.error("Failed to initialize repository:", writeError.message);
     }
 }

@@ -1,34 +1,97 @@
-// #region agent log
-fetch('http://127.0.0.1:7243/ingest/bc8ed9df-e2f0-4adf-b6b1-e9c446f62c5f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'controllers/commit.js:1', message: 'commit.js module loading', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'F' }) }).catch(() => { });
-// #endregion
 import fs from 'fs/promises';
 import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+import { validateVcsRepo, resolveHead } from '../utils/vcs.js';
 
 export async function commitRepo(message) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/bc8ed9df-e2f0-4adf-b6b1-e9c446f62c5f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'controllers/commit.js:5', message: 'commitRepo function entry', data: { message }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'F' }) }).catch(() => { });
-    // #endregion
-    const repoPath = path.resolve(process.cwd(), '.apnagit');
-    const stagePath = path.join(repoPath, "staging");
-    const commitPath = path.join(repoPath, "commit");
+    await validateVcsRepo();
 
+    const repoPath = path.resolve(process.cwd(), '.vcs');
+    const indexPath = path.join(repoPath, 'index.json');
+    const headPath = path.join(repoPath, 'HEAD');
+    const stagingPath = path.join(repoPath, 'staging');
 
     try {
-        const commitId = uuidv4();
-        const commitDir = path.join(commitPath, commitId);
-        await fs.mkdir(commitDir, { recursive: true });
-
-        const files = await fs.readdir(stagePath);
-        for (const file of files) {
-            await fs.copyFile(path.join(stagePath, file), path.join(commitDir, file));
+        // Read index.json to get tracked files
+        let indexData;
+        try {
+            const indexContent = await fs.readFile(indexPath, 'utf8');
+            indexData = JSON.parse(indexContent);
+        } catch (error) {
+            console.error("No files staged for commit. Run 'vcs add' first.");
+            return;
         }
 
-        await fs.writeFile(path.join(commitDir, "commit.json"),
-            JSON.stringify({ message, timestamp: new Date().toISOString() }));
-        console.log(`Committed with ID: ${commitId} created with message: "${message}"`);
-    }
-    catch (err) {
-        console.error("Error during commit:", err);
+        if (!indexData.tracked || Object.keys(indexData.tracked).length === 0) {
+            console.error("No files staged for commit. Run 'vcs add' first.");
+            return;
+        }
+
+        // Get current branch and parent commit using resolveHead
+        const { commitId: parentCommit, branchName: currentBranch } = await resolveHead();
+
+        if (!currentBranch) {
+            console.error("Could not determine current branch.");
+            return;
+        }
+
+        // Generate commit hash using crypto
+        const commitData = {
+            message,
+            timestamp: new Date().toISOString(),
+            author: process.env.USER || process.env.USERNAME || 'unknown',
+            parent: parentCommit,
+            branch: currentBranch,
+            files: indexData.tracked
+        };
+
+        const commitString = JSON.stringify(commitData);
+        const commitHash = crypto.createHash('sha256').update(commitString).digest('hex').substring(0, 8);
+
+        // Create commit directory
+        const commitsPath = path.join(repoPath, 'commits');
+        const commitDir = path.join(commitsPath, commitHash);
+        const commitFilesDir = path.join(commitDir, 'files');
+
+        await fs.mkdir(commitFilesDir, { recursive: true });
+
+        // Copy staged files to commit
+        const trackedFiles = Object.keys(indexData.tracked);
+        for (const file of trackedFiles) {
+            const sourcePath = path.join(stagingPath, file);
+            const destPath = path.join(commitFilesDir, file);
+
+            try {
+                // Ensure destination directory exists
+                await fs.mkdir(path.dirname(destPath), { recursive: true });
+                await fs.copyFile(sourcePath, destPath);
+            } catch (error) {
+                console.error(`Error copying ${file} to commit:`, error.message);
+                continue;
+            }
+        }
+
+        // Write commit metadata (renamed from meta.json to commit.json)
+        await fs.writeFile(path.join(commitDir, 'commit.json'), JSON.stringify(commitData, null, 2));
+
+        // Update branch head
+        const branchPath = path.join(repoPath, 'branches', `${currentBranch}.json`);
+        let branchData = { name: currentBranch, head: commitHash };
+        try {
+            const existingBranchData = JSON.parse(await fs.readFile(branchPath, 'utf8'));
+            branchData = { ...existingBranchData, head: commitHash };
+        } catch (error) {
+            // Branch file doesn't exist yet
+        }
+
+        await fs.writeFile(branchPath, JSON.stringify(branchData, null, 2));
+
+        // Clear staging area after commit (optional, but good practice)
+        // For now, we'll just keep it as is since that's the current behavior.
+
+        console.log(`Committed: ${commitHash} — ${message}`);
+
+    } catch (err) {
+        console.error("Error during commit:", err.message);
     }
 }

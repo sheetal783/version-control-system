@@ -1,23 +1,28 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { resolveHead } from './commit.js';
+import { validateVcsRepo, resolveHead } from '../utils/vcs.js';
 
 export async function getLog() {
-    const repoPath = path.resolve(process.cwd(), '.apnagit');
+    await validateVcsRepo();
+
+    const repoPath = path.resolve(process.cwd(), '.vcs');
     const commitsPath = path.join(repoPath, 'commits');
     const logs = [];
     const visited = new Set();
 
     try {
         const { commitId: headCommitId } = await resolveHead();
-        if (!headCommitId) return []; // empty repo guard
+        if (!headCommitId) {
+            console.log("No commits found in this repository.");
+            return [];
+        }
 
         let currentCommitId = headCommitId;
 
         while (currentCommitId) {
             // Cycle detection
             if (visited.has(currentCommitId)) {
-                console.warn("Cycle detected at:", currentCommitId);
+                console.warn("Cycle detected at commit:", currentCommitId);
                 break;
             }
             visited.add(currentCommitId);
@@ -30,11 +35,18 @@ export async function getLog() {
                     message: commitData.message,
                     author: commitData.author || "Unknown",
                     timestamp: commitData.timestamp,
-                    parent: commitData.parent || null, // explicit null
+                    parent: commitData.parent || null,
                 });
+                
+                // Format and print log to console (CLI behavior)
+                console.log(`\nCommit: ${currentCommitId}`);
+                console.log(`Author: ${commitData.author || "Unknown"}`);
+                console.log(`Date:   ${new Date(commitData.timestamp).toLocaleString()}`);
+                console.log(`\n    ${commitData.message}\n`);
+
                 currentCommitId = commitData.parent || null;
             } catch (err) {
-                console.error(`Failed to read commit ${currentCommitId}:`, err.message);
+                console.error(`Error: Failed to read commit ${currentCommitId}:`, err.message);
                 break;
             }
         }
@@ -45,4 +57,3 @@ export async function getLog() {
         return [];
     }
 }
-

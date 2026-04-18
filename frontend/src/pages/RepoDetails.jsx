@@ -87,12 +87,14 @@ const RepoDetails = () => {
     { id: 'Commits', icon: GitCommit, count: commits.length },
   ];
 
-  const files = commits.length > 0 ? (commits[0].files || []).map(f => ({
+  const filesData = (commits.length > 0 && commits[0].files) ? commits[0].files : [];
+  const filesArray = Array.isArray(filesData) ? filesData : Object.keys(filesData);
+  const files = filesArray.map(f => ({
     name: f,
     type: 'file', // Our push logic currently only tracks files
     message: commits[0].message,
     time: new Date(commits[0].timestamp).toLocaleString()
-  })) : [];
+  }));
 
   const tabContentVariants = {
     initial: { opacity: 0, y: 10, filter: 'blur(4px)' },
